@@ -1,88 +1,105 @@
 /*
 Use cases:
 1. Notification
-*/
+2. Two approaches: push vs. pull
+3. This is push approach.
 
-#include<bits/stdc++.h>
+Observer triggers subscribe() and unsubscribe().
+*/
+#include <list>
+#include <iostream>
+
 using namespace std;
 
-class WeatherObservableConcrete;
+class ISubscriber;
 
-class ObserverInterface {
+class IPublisher {
 public:
-    ObserverInterface() {}
-    virtual ~ObserverInterface() {}
-
-    virtual void update() = 0;
+   virtual ~IPublisher() = default;
+   virtual void addSubscriber(ISubscriber *subscriber) = 0;
+   virtual void removeSubscriber(ISubscriber *susbcriber) = 0;
+   virtual void notify() = 0;
 };
 
-class ObserverConcrete: public ObserverInterface {
-// Violates Dependency Inversion Principle.
+class ISubscriber {
+public:
+    virtual ~ISubscriber() = default;
+    virtual void update(string_view message) = 0;
+    virtual void unsubscribe() = 0;
+};
+
+class EmailSubscriber : public ISubscriber {
+public:
+    EmailSubscriber(IPublisher *publisher, string_view idStr) : m_publisher(publisher), m_idStr(idStr) {
+        publisher->addSubscriber(this);
+    }
+    ~EmailSubscriber() = default;
+
+    void update(string_view message) override {
+        std::cout << "Id: " << m_idStr << " | Update: " << message << std::endl;
+    }
+
+    void unsubscribe() override {
+        m_publisher->removeSubscriber(this);
+    }
+
 private:
-    WeatherObservableConcrete* weatherObservableConcrete;
-public:
-    ObserverConcrete(WeatherObservableConcrete* weatherObservableConcrete): weatherObservableConcrete(weatherObservableConcrete) {}
-
-    void update() override {
-        // Received notification, poll data.
-        cout << "Received Notification" << endl;
-    }
+    IPublisher *m_publisher;
+    string m_idStr;
 };
 
-class WeatherObservableInterface {
-public: 
-    WeatherObservableInterface() {}
-    virtual ~WeatherObservableInterface() {}
-    virtual bool add(ObserverInterface* observerInterface) = 0;
-    virtual bool remove(ObserverInterface* observerInterface) = 0;
-    virtual bool notify() = 0;
-};
-
-class WeatherObservableConcrete: public WeatherObservableInterface {
-private:
-    vector<ObserverInterface*> observersList;
-    int temperature;
-
+class TemperaturePublisher : public IPublisher {
 public:
-    bool add(ObserverInterface* observerInterface) override {
-        observersList.push_back(observerInterface);
-        cout << "Added Observer" << endl;
-        return true;
+    TemperaturePublisher() = default;
+    ~TemperaturePublisher() = default;
+
+    void addSubscriber(ISubscriber *subscriber) override {
+        m_subscribersList.push_back(subscriber);
     }
 
-    bool remove(ObserverInterface* observerInterface) override {
-        // Logic for remove.
-        return true;
-    }
-
-    // It depends on who's calling this notify().
-    bool notify() override {
-        // Do op.
-        for(ObserverInterface* oi: observersList) {
-            // Push Notification
-            // You can send updated details in parameter.
-            // Not using any params. now.
-            oi->update();
+    void removeSubscriber(ISubscriber *subscriber) override {
+        for(list<ISubscriber*>::iterator it = m_subscribersList.begin(); it != m_subscribersList.end(); it++) {
+            if(*it == subscriber) {
+                m_subscribersList.erase(it);
+                break;
+            }
         }
-        return true;
     }
 
-    int getTemperature() {
-        return temperature;
+    void notify() override {
+        for(ISubscriber *subscriber : m_subscribersList) {
+            subscriber->update("Temperature is changed to : " + to_string(m_temperature));
+        }
+
+        return;
     }
 
-    // Yet to add setter.
+    void updateTemperature(int64_t temperature) {
+        m_temperature = temperature;
+        notify();
+    }
+
+
+private:
+    std::list<ISubscriber*> m_subscribersList;
+    int64_t m_temperature;
 };
 
 int main() {
-    WeatherObservableConcrete* weatherObservableConcrete = new WeatherObservableConcrete();
-    WeatherObservableInterface* weatherObservableInterface = weatherObservableConcrete;
-    ObserverInterface* observer1 = new ObserverConcrete(weatherObservableConcrete);
-    ObserverInterface* observer2 = new ObserverConcrete(weatherObservableConcrete);
+    TemperaturePublisher *publisher = new TemperaturePublisher();
+    ISubscriber *subscriber1 = new EmailSubscriber(publisher, "345671");
+    ISubscriber *subscriber2 = new EmailSubscriber(publisher, "345672");
+    ISubscriber *subscriber3 = new EmailSubscriber(publisher, "345673");
 
-    weatherObservableInterface->add(observer1);
-    weatherObservableInterface->add(observer2);
+    publisher->updateTemperature(30);
 
-    // Notify everyone.
-    weatherObservableInterface->notify();
+    subscriber1->unsubscribe();
+
+    publisher->updateTemperature(20);
+
+    delete subscriber1;
+    delete subscriber2;
+    delete subscriber3;
+
+
 }
